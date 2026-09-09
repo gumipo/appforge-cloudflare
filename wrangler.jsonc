@@ -14,7 +14,8 @@
     "AUTH_MODE": "access",
     "ANTHROPIC_MODEL": "claude-sonnet-5",
     "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
-    "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222"
+    "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222",
+    "PUBLIC_GENERATED_WORKERS": "false"
   },
   "browser": { "binding": "BROWSER" },
   "d1_databases": [

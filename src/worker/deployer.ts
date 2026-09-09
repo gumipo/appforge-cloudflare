@@ -31,29 +31,6 @@ async function cloudflareRequest<T>(url: string, token: string, init: RequestIni
   return payload.result;
 }
 
-export async function deployGeneratedHtml(env: Env, workerName: string, html: string): Promise<string | null> {
-  const credentials = requireProductionCredentials(env);
-  if (!credentials) return null;
-
-  const workerModule = `const html=${JSON.stringify(html)};export default{async fetch(){return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","x-content-type-options":"nosniff","referrer-policy":"no-referrer","cache-control":"public, max-age=60"}})}};`;
-  const data = new FormData();
-  data.append(
-    "metadata",
-    new Blob([JSON.stringify({ main_module: "worker.mjs", compatibility_date: "2026-09-01" })], { type: "application/json" }),
-  );
-  data.append("worker.mjs", new Blob([workerModule], { type: "application/javascript+module" }), "worker.mjs");
-
-  const base = `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/workers/scripts/${workerName}`;
-  await cloudflareRequest(base, credentials.apiToken, { method: "PUT", body: data });
-  await cloudflareRequest(`${base}/subdomain`, credentials.apiToken, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ enabled: true, previews_enabled: true }),
-  });
-
-  return `https://${workerName}.${credentials.subdomain}.workers.dev`;
-}
-
 export interface DeploymentTarget {
   workerName: string;
   platform: "workers-for-platforms" | "workers";
@@ -83,10 +60,11 @@ export async function deployVersionedHtml(
 
   const base = `https://api.cloudflare.com/client/v4/accounts/${credentials.accountId}/workers/scripts/${workerName}`;
   await cloudflareRequest(base, credentials.apiToken, { method: "PUT", body: data });
+  const makePublic = env.PUBLIC_GENERATED_WORKERS === "true";
   await cloudflareRequest(`${base}/subdomain`, credentials.apiToken, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ enabled: true, previews_enabled: true }),
+    body: JSON.stringify({ enabled: makePublic, previews_enabled: makePublic }),
   });
-  return { workerName, platform: "workers", directUrl: `https://${workerName}.${credentials.subdomain}.workers.dev` };
+  return { workerName, platform: "workers", directUrl: makePublic ? `https://${workerName}.${credentials.subdomain}.workers.dev` : null };
 }

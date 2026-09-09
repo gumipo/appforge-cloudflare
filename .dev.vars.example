@@ -2,6 +2,7 @@
 CLOUDFLARE_ACCOUNT_ID=your_account_id
 CLOUDFLARE_API_TOKEN=token_with_workers_scripts_write
 CF_WORKERS_SUBDOMAIN=your_workers_dev_subdomain
+PUBLIC_GENERATED_WORKERS=false
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-sonnet-5
 

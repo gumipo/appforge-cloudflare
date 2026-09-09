@@ -93,5 +93,6 @@ await window.AppForge.data.remove("shifts", row.id);
 - APIキーはWorker Secretsに保存し、管理UIへ返さない
 - 生成物はCSPとsandbox iframeでプレビュー
 - AI利用量と管理操作をD1へ記録
+- 通常構成の個別`workers.dev` URLは既定で無効。Access配下のAppForge URLから配信
 
 公開前にはCloudflare Access policy、API Tokenの最小権限、レート制限、利用量上限、バックアップ・削除ポリシーを組織要件に合わせて設定してください。

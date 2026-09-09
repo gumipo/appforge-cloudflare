@@ -52,6 +52,8 @@ Account IDとworkers.dev subdomainは非秘密の環境変数として設定済�
 
 通常のWorkers構成ではWorkers Scriptsの編集権限、Workers for Platforms構成ではdispatch namespaceのscript uploadに必要な権限だけを付けてください。
 
+`PUBLIC_GENERATED_WORKERS`は安全のため`false`です。この場合、生成Workerの`workers.dev` URLは無効化され、Accessで保護したAppForge WorkerのプレビューURLから配信します。公開サイトを作る用途でのみ、公開範囲を確認して`true`へ変更してください。
+
 ## 5. Deploy
 
 通常の個別Workers構成:

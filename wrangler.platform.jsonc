@@ -15,6 +15,7 @@
     "ANTHROPIC_MODEL": "claude-sonnet-5",
     "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
     "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222",
+    "PUBLIC_GENERATED_WORKERS": "false",
     "WFP_NAMESPACE": "appforge-apps"
   },
   "browser": { "binding": "BROWSER" },

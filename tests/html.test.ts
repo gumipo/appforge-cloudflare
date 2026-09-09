@@ -46,4 +46,10 @@ describe("local fallback generation", () => {
   it("derives a concise title from Japanese requests", () => {
     expect(titleFromPrompt("習慣トラッカーを作成して！追加の説明")).toBe("習慣トラッカー");
   });
+
+  it("describes relationships for attendance applications", () => {
+    const app = createFallbackApp("社員の勤怠管理アプリを作って");
+    expect(app.dataModel.map((collection) => collection.name)).toEqual(["employees", "attendance"]);
+    expect(app.dataModel[1].fields[0].references).toEqual({ collection: "employees", field: "id" });
+  });
 });

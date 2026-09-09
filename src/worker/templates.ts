@@ -59,6 +59,7 @@ function productTemplate(title: string, prompt: string): TemplateResult {
 
 export function createFallbackApp(prompt: string): GeneratedApp {
   const title = titleFromPrompt(prompt);
+  const attendance = /(勤怠|出勤|退勤|attendance|timesheet|打刻)/i.test(prompt);
   const todo = /(todo|to-do|タスク|やること|task|勤怠|出勤|退勤)/i.test(prompt);
   const result = todo
     ? todoTemplate(title, prompt)
@@ -67,7 +68,22 @@ export function createFallbackApp(prompt: string): GeneratedApp {
     ...result,
     summary: todo ? "Created an interactive task-oriented application." : "Created a polished responsive product experience.",
     files: [{ path: "index.html", content: result.html }],
-    dataModel: todo ? [{
+    dataModel: attendance ? [{
+      name: "employees",
+      fields: [
+        { name: "name", type: "text", required: true },
+        { name: "email", type: "text", required: true },
+        { name: "active", type: "boolean", required: true },
+      ],
+    }, {
+      name: "attendance",
+      fields: [
+        { name: "employeeId", type: "reference", required: true, references: { collection: "employees", field: "id" } },
+        { name: "clockIn", type: "datetime", required: true },
+        { name: "clockOut", type: "datetime", required: false },
+        { name: "note", type: "text", required: false },
+      ],
+    }] : todo ? [{
       name: "tasks",
       fields: [
         { name: "title", type: "text", required: true },

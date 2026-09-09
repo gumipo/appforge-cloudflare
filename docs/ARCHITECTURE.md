@@ -32,6 +32,8 @@ owner/adminは招待、owner/admin/editorは生成・編集・データ更新、
 
 `apps.latest_version_id`は最後に生成した版、`apps.published_version_id`は本番版です。この2つを分けることで、プレビュー中の変更が本番へ勝手に反映されません。`app_versions.based_on_version_id`で派生元を追跡し、R2 artifactと`source_hash`で生成結果を固定します。
 
+各versionは正規化した`data_model`も保持します。UIのDataタブはcollectionをノード、`reference` fieldを矢印として描画するため、バージョンを切り替えるだけで機能追加前後のデータ構造を比較できます。
+
 ## Current scope
 
 生成成果物は自己完結HTML/CSS/JavaScriptを中心にしています。共通JSON record runtimeにより通常の業務CRUDは作れます。任意npm依存、任意サーバーコード、アプリごとの専用D1 migration、外部OAuth連携を生成させるには、次段階として隔離ビルド環境・依存許可リスト・secret broker・resource provisionerを追加してください。

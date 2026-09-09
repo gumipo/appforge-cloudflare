@@ -71,9 +71,9 @@ export async function processBuild(env: Env, job: BuildJob): Promise<void> {
     const completedAt = new Date().toISOString();
 
     await env.DB.batch([
-      env.DB.prepare(`UPDATE app_versions SET status = 'ready', title = ?, description = ?, summary = ?, source_key = ?, source_html = ?,
+      env.DB.prepare(`UPDATE app_versions SET status = 'ready', title = ?, description = ?, summary = ?, data_model = ?, source_key = ?, source_html = ?,
         source_hash = ?, preview_url = ?, worker_name = ?, thumbnail_key = ?, error_message = NULL, updated_at = ? WHERE id = ?`)
-        .bind(generated.title, generated.description, generated.summary, sourceKey, html, sourceHash, previewUrl, target?.workerName ?? null, thumbnailKey, completedAt, version.id),
+        .bind(generated.title, generated.description, generated.summary, JSON.stringify(generated.dataModel), sourceKey, html, sourceHash, previewUrl, target?.workerName ?? null, thumbnailKey, completedAt, version.id),
       env.DB.prepare(`UPDATE apps SET title = ?, description = ?, status = 'ready', preview_url = ?, thumbnail_key = ?, source_html = ?,
         latest_version_id = ?, error_message = NULL, updated_at = ? WHERE id = ? AND tenant_id = ?`)
         .bind(generated.title, generated.description, previewUrl, thumbnailKey, html, version.id, completedAt, app.id, job.tenantId),

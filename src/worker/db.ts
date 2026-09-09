@@ -1,4 +1,4 @@
-import type { AppDetail, AppSummary, AppVersionSummary, ChatMessage } from "../shared/types";
+import type { AppDetail, AppSummary, AppVersionSummary, ChatMessage, DataCollection } from "../shared/types";
 import type { AppRow, MessageRow, VersionRow } from "./types";
 
 const APP_COLUMNS = `
@@ -7,13 +7,22 @@ const APP_COLUMNS = `
 `;
 
 const VERSION_COLUMNS = `
-  id, app_id, version_number, status, title, description, summary, prompt, source_key, source_html,
+  id, app_id, version_number, status, title, description, summary, data_model, prompt, source_key, source_html,
   source_hash, preview_url, worker_name, thumbnail_key, error_message, created_by, based_on_version_id,
   created_at, updated_at, published_at
 `;
 
 function toMessage(row: MessageRow): ChatMessage {
   return { id: row.id, appId: row.app_id, role: row.role, content: row.content, createdAt: row.created_at };
+}
+
+function parseDataModel(value: string): DataCollection[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed as DataCollection[] : [];
+  } catch {
+    return [];
+  }
 }
 
 export function toVersion(row: VersionRow): AppVersionSummary {
@@ -25,6 +34,7 @@ export function toVersion(row: VersionRow): AppVersionSummary {
     title: row.title,
     description: row.description,
     summary: row.summary,
+    dataModel: parseDataModel(row.data_model),
     prompt: row.prompt,
     sourceKey: row.source_key,
     previewUrl: row.status === "ready" || row.status === "published"

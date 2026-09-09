@@ -7,6 +7,8 @@ import {
   Clock3,
   Cloud,
   Code2,
+  Database,
+  Eye,
   ExternalLink,
   GalleryHorizontalEnd,
   LoaderCircle,
@@ -22,7 +24,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import type { AppDetail, AppStatus, AppSummary, AppVersionSummary, ChatMessage, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
+import type { AppDetail, AppStatus, AppSummary, AppVersionSummary, ChatMessage, DataCollection, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
 import { createApp, createWorkspace, fetchApp, fetchApps, fetchSession, fetchWorkspacePeople, inviteWorkspaceMember, publishAppVersion, reviseApp, selectTenant } from "./api";
 
 const EXAMPLES = [
@@ -98,11 +100,85 @@ function AppCard({ app, onOpen }: { app: AppSummary; onOpen: () => void }) {
   );
 }
 
+function DataModelView({ collections, versionNumber }: { collections: DataCollection[]; versionNumber: number }) {
+  if (!collections.length) {
+    return <div className="data-model-empty"><Database size={30} /><h2>Data model is empty</h2><p>データを保存する機能をチャットで追加すると、コレクションと参照関係がここに表示されます。</p></div>;
+  }
+
+  const columns = Math.min(3, collections.length === 1 ? 1 : 2);
+  const cardWidth = 250;
+  const gapX = 110;
+  const gapY = 44;
+  const margin = 34;
+  const heights = collections.map((collection) => 72 + (collection.fields.length + 1) * 24);
+  const rowCount = Math.ceil(collections.length / columns);
+  const rowHeights = Array.from({ length: rowCount }, (_, row) => Math.max(...heights.slice(row * columns, (row + 1) * columns)));
+  const positions = collections.map((_, index) => {
+    const row = Math.floor(index / columns);
+    const column = index % columns;
+    const y = margin + rowHeights.slice(0, row).reduce((sum, value) => sum + value + gapY, 0);
+    return { x: margin + column * (cardWidth + gapX), y, height: heights[index] };
+  });
+  const width = margin * 2 + columns * cardWidth + (columns - 1) * gapX;
+  const height = margin * 2 + rowHeights.reduce((sum, value) => sum + value, 0) + Math.max(0, rowCount - 1) * gapY;
+  const markerId = `relation-arrow-${versionNumber}`;
+
+  const relations = collections.flatMap((collection, collectionIndex) => collection.fields.flatMap((field, fieldIndex) => {
+    if (!field.references) return [];
+    const targetIndex = collections.findIndex((candidate) => candidate.name === field.references?.collection);
+    if (targetIndex < 0) return [];
+    return [{ collection, collectionIndex, field, fieldIndex, targetIndex }];
+  }));
+
+  return (
+    <div className="data-model-view">
+      <div className="data-model-heading"><div><Database size={15} /><span>Data model · v{versionNumber}</span></div><small>{collections.length} collections · {relations.length} relations</small></div>
+      <div className="data-model-canvas">
+        <svg className="data-model-svg" viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Version ${versionNumber} data model with ${collections.length} collections and ${relations.length} relations`}>
+          <defs><marker id={markerId} markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" /></marker></defs>
+          {relations.map(({ collectionIndex, field, fieldIndex, targetIndex }) => {
+            const from = positions[collectionIndex];
+            const to = positions[targetIndex];
+            const leftToRight = from.x <= to.x;
+            const startX = leftToRight ? from.x + cardWidth : from.x;
+            const endX = leftToRight ? to.x : to.x + cardWidth;
+            const startY = from.y + 72 + (fieldIndex + 1) * 24 - 10;
+            const endY = to.y + 72 + 12;
+            const bend = Math.max(48, Math.abs(endX - startX) * .45);
+            const direction = leftToRight ? 1 : -1;
+            const d = `M ${startX} ${startY} C ${startX + bend * direction} ${startY}, ${endX - bend * direction} ${endY}, ${endX} ${endY}`;
+            return <g key={`${collectionIndex}-${field.name}-${targetIndex}`}><path className="relation-line" d={d} markerEnd={`url(#${markerId})`} /><text className="relation-label" x={(startX + endX) / 2} y={(startY + endY) / 2 - 6} textAnchor="middle">{field.name}</text></g>;
+          })}
+          {collections.map((collection, index) => {
+            const position = positions[index];
+            return (
+              <g className="model-node" key={collection.name} transform={`translate(${position.x} ${position.y})`}>
+                <rect className="node-surface" width={cardWidth} height={position.height} rx="14" />
+                <path className="node-header" d={`M0 14 Q0 0 14 0 H${cardWidth - 14} Q${cardWidth} 0 ${cardWidth} 14 V44 H0 Z`} />
+                <text className="node-title" x="15" y="28">{collection.name}</text>
+                <text className="node-kind" x={cardWidth - 15} y="28" textAnchor="end">COLLECTION</text>
+                <line className="node-divider" x1="0" x2={cardWidth} y1="44" y2="44" />
+                <text className="field-key" x="15" y="69">PK</text><text className="field-name" x="47" y="69">id</text><text className="field-type" x={cardWidth - 15} y="69" textAnchor="end">text</text>
+                {collection.fields.map((field, fieldIndex) => {
+                  const y = 69 + (fieldIndex + 1) * 24;
+                  return <g key={field.name}><text className={field.references ? "field-key relation" : "field-key"} x="15" y={y}>{field.references ? "FK" : field.required ? "●" : "○"}</text><text className="field-name" x="47" y={y}>{field.name}</text><text className="field-type" x={cardWidth - 15} y={y} textAnchor="end">{field.references ? `→ ${field.references.collection}` : field.type}</text></g>;
+                })}
+              </g>
+            );
+          })}
+        </svg>
+      </div>
+      <div className="model-legend"><span><b>PK</b> primary key</span><span><b>FK</b> reference</span><span><b>●</b> required</span><span><b>○</b> optional</span></div>
+    </div>
+  );
+}
+
 export function App() {
   const [apps, setApps] = useState<AppSummary[]>([]);
   const [session, setSession] = useState<SessionInfo | null>(null);
   const [selected, setSelected] = useState<AppDetail | null>(null);
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
+  const [previewMode, setPreviewMode] = useState<"preview" | "data">("preview");
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -129,6 +205,7 @@ export function App() {
     const detail = await fetchApp(summary.id);
     setSelected(detail);
     setActiveVersionId(detail.latestVersionId);
+    setPreviewMode("preview");
     if (updateHistory) window.history.pushState({}, "", `/apps/${summary.slug}`);
   }, []);
 
@@ -193,6 +270,7 @@ export function App() {
   const startNew = () => {
     setSelected(null);
     setActiveVersionId(null);
+    setPreviewMode("preview");
     setPrompt("");
     setError(null);
     window.history.pushState({}, "", "/");
@@ -367,12 +445,13 @@ export function App() {
                   {selected.versions.map((version) => <option key={version.id} value={version.id}>v{version.versionNumber}{version.id === selected.publishedVersionId ? " · Published" : ` · ${version.status}`}</option>)}
                 </select>
               )}
-              <div className="address"><span className={activeVersion?.previewUrl ? "live-dot" : "idle-dot"}></span>{activeVersion?.previewUrl ?? "Your preview will appear here"}</div>
+              {selected && activeVersion && <div className="view-switch" aria-label="Preview mode"><button className={previewMode === "preview" ? "active" : ""} onClick={() => setPreviewMode("preview")}><Eye size={12} />Preview</button><button className={previewMode === "data" ? "active" : ""} onClick={() => setPreviewMode("data")}><Database size={12} />Data</button></div>}
+              <div className="address"><span className={activeVersion?.previewUrl ? "live-dot" : "idle-dot"}></span>{previewMode === "data" && activeVersion ? `${activeVersion.dataModel.length} collections in v${activeVersion.versionNumber}` : activeVersion?.previewUrl ?? "Your preview will appear here"}</div>
               <button className="icon-button" onClick={() => selected && void fetchApp(selected.id).then(setSelected)} title="更新"><RefreshCw size={15} /></button>
               <button className="icon-button" onClick={() => activeVersion?.previewUrl && window.open(activeVersion.previewUrl, "_blank")} disabled={!activeVersion?.previewUrl} title="別タブで開く"><ExternalLink size={15} /></button>
             </div>
             <div className="preview-stage">
-              {activeVersion?.previewUrl && (activeVersion.status === "ready" || activeVersion.status === "published") ? (
+              {previewMode === "data" && activeVersion ? <DataModelView collections={activeVersion.dataModel} versionNumber={activeVersion.versionNumber} /> : activeVersion?.previewUrl && (activeVersion.status === "ready" || activeVersion.status === "published") ? (
                 <iframe
                   key={`${activeVersion.id}-${activeVersion.updatedAt}`}
                   src={activeVersion.previewUrl}

@@ -10,11 +10,12 @@ Return strict JSON only with these fields:
   "summary": string,
   "html": string,
   "files": [{"path": string, "content": string}],
-  "dataModel": [{"name": string, "fields": [{"name": string, "type": "text"|"number"|"boolean"|"date"|"datetime", "required": boolean}]}]
+  "dataModel": [{"name": string, "fields": [{"name": string, "type": "text"|"number"|"boolean"|"date"|"datetime"|"reference", "required": boolean, "references"?: {"collection": string, "field": string}}]}]
 }
 The html must be a complete self-contained HTML document with inline CSS and JavaScript and must also be present as files[index.html].
 Do not use external assets, arbitrary network requests, CDNs, iframes, eval, or dynamic script creation.
 For persistent application data, use the preinstalled runtime only: window.AppForge.data.list(collection), create(collection, data), update(collection, id, data), and remove(collection, id). These return promises and are authenticated, tenant-scoped APIs. Never use localStorage for domain data. Use stable lowercase collection names matching the dataModel names. Show useful loading, empty, and error states.
+Describe every persisted collection in dataModel. For foreign-key-like fields use type "reference" and references { collection, field: "id" } so AppForge can visualize relationships. Do not create relationships to collections absent from dataModel.
 Make the UI responsive, accessible, visually distinctive, and genuinely interactive.
 For revisions, preserve existing useful behavior and implement the requested change instead of replacing the product concept.
 Keep paths relative, never include secrets, and keep total output under 450 KB.`;
@@ -34,12 +35,21 @@ function normalizeGenerated(parsed: Partial<GeneratedApp>): GeneratedApp | null 
     ? parsed.files.filter((file): file is { path: string; content: string } => Boolean(file) && typeof file.path === "string" && typeof file.content === "string" && isSafePath(file.path)).slice(0, 40)
     : [];
   if (!files.some((file) => file.path === "index.html")) files.unshift({ path: "index.html", content: parsed.html });
-  const allowedTypes = new Set(["text", "number", "boolean", "date", "datetime"]);
+  const allowedTypes = new Set(["text", "number", "boolean", "date", "datetime", "reference"]);
+  const collectionNames = new Set(Array.isArray(parsed.dataModel)
+    ? parsed.dataModel.flatMap((collection) => collection && typeof collection.name === "string" ? [collection.name] : [])
+    : []);
   const dataModel = Array.isArray(parsed.dataModel) ? parsed.dataModel.flatMap((collection) => {
     if (!collection || typeof collection.name !== "string" || !/^[a-z][a-z0-9_-]{0,47}$/.test(collection.name)) return [];
     const fields = Array.isArray(collection.fields) ? collection.fields.flatMap((field) => {
       if (!field || typeof field.name !== "string" || !/^[a-z][a-zA-Z0-9_]{0,47}$/.test(field.name) || !allowedTypes.has(field.type)) return [];
-      return [{ name: field.name, type: field.type, required: field.required === true }];
+      const references = field.type === "reference" && field.references
+        && typeof field.references.collection === "string" && collectionNames.has(field.references.collection)
+        && typeof field.references.field === "string" && /^[a-z][a-zA-Z0-9_]{0,47}$/.test(field.references.field)
+        ? { collection: field.references.collection, field: field.references.field }
+        : undefined;
+      if (field.type === "reference" && !references) return [];
+      return [{ name: field.name, type: field.type, required: field.required === true, ...(references ? { references } : {}) }];
     }).slice(0, 40) : [];
     return [{ name: collection.name, fields }];
   }).slice(0, 20) as GeneratedApp["dataModel"] : [];

@@ -1,5 +1,18 @@
 export type AppStatus = "queued" | "building" | "ready" | "failed";
 export type VersionStatus = "queued" | "building" | "ready" | "published" | "failed" | "archived";
+export type DataFieldType = "text" | "number" | "boolean" | "date" | "datetime" | "reference";
+
+export interface DataModelField {
+  name: string;
+  type: DataFieldType;
+  required: boolean;
+  references?: { collection: string; field: string };
+}
+
+export interface DataCollection {
+  name: string;
+  fields: DataModelField[];
+}
 
 export interface UserSummary {
   id: string;
@@ -47,6 +60,7 @@ export interface AppVersionSummary {
   title: string;
   description: string;
   summary: string;
+  dataModel: DataCollection[];
   prompt: string;
   sourceKey: string | null;
   previewUrl: string | null;

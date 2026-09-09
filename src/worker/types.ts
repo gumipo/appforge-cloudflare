@@ -1,4 +1,4 @@
-import type { AppStatus, VersionStatus } from "../shared/types";
+import type { AppStatus, DataCollection, VersionStatus } from "../shared/types";
 
 export interface BuildJob {
   appId: string;
@@ -70,10 +70,7 @@ export interface GeneratedApp {
   summary: string;
   html: string;
   files: Array<{ path: string; content: string }>;
-  dataModel: Array<{
-    name: string;
-    fields: Array<{ name: string; type: "text" | "number" | "boolean" | "date" | "datetime"; required: boolean }>;
-  }>;
+  dataModel: DataCollection[];
 }
 
 export interface VersionRow {
@@ -84,6 +81,7 @@ export interface VersionRow {
   title: string;
   description: string;
   summary: string;
+  data_model: string;
   prompt: string;
   source_key: string | null;
   source_html: string | null;

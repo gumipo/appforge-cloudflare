@@ -26,8 +26,9 @@ interface ClaudeMessageResponse {
 }
 
 interface WorkersAiResponse {
-  response?: string;
+  response?: unknown;
   usage?: { prompt_tokens?: number; completion_tokens?: number };
+  choices?: Array<{ message?: { content?: unknown } }>;
 }
 
 function isSafePath(path: string): boolean {
@@ -86,6 +87,21 @@ function parseGenerated(value: string): GeneratedApp | null {
   return null;
 }
 
+function generatedFromWorkersPayload(payload: unknown): GeneratedApp | null {
+  if (typeof payload === "string") return parseGenerated(payload);
+  if (!payload || typeof payload !== "object") return null;
+  const result = payload as WorkersAiResponse;
+  if (result.response && typeof result.response === "object") {
+    const generated = normalizeGenerated(result.response as Partial<GeneratedApp>);
+    if (generated) return generated;
+  }
+  if (typeof result.response === "string") return parseGenerated(result.response);
+  const content = result.choices?.[0]?.message?.content;
+  if (typeof content === "string") return parseGenerated(content);
+  if (content && typeof content === "object") return normalizeGenerated(content as Partial<GeneratedApp>);
+  return normalizeGenerated(result as Partial<GeneratedApp>);
+}
+
 function claudeEndpoint(env: Env): string | null {
   const base = env.ANTHROPIC_BASE_URL?.replace(/\/$/, "");
   if (base) return `${base}/v1/messages`;
@@ -134,8 +150,7 @@ async function generateWithWorkersAi(
       max_tokens: 12_000,
       temperature: 0.2,
     }) as WorkersAiResponse | string;
-    const text = typeof payload === "string" ? payload : payload.response ?? "";
-    const generated = parseGenerated(text);
+    const generated = generatedFromWorkersPayload(payload);
     if (!generated) throw new Error("Workers AI returned an invalid application artifact.");
     const tokenUsage = typeof payload === "string" ? undefined : payload.usage;
     await recordUsage(env, usage, "workers-ai", model, tokenUsage?.prompt_tokens ?? 0, tokenUsage?.completion_tokens ?? 0);

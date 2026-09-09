@@ -13,7 +13,7 @@ describe("AI provider selection", () => {
       dataModel: [{ name: "attendance", fields: [{ name: "clockIn", type: "datetime", required: true }] }],
     };
     const run = vi.fn().mockResolvedValue({
-      response: JSON.stringify(artifact),
+      response: artifact,
       usage: { prompt_tokens: 100, completion_tokens: 200 },
     });
     const recordRun = vi.fn().mockResolvedValue(undefined);

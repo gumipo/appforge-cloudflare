@@ -6,7 +6,7 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/preview/*", "/apps/*"]
+    "run_worker_first": ["/api/*", "/preview/*", "/run/*", "/apps/*", "/og/*"]
   },
   "d1_databases": [
     {
@@ -24,4 +24,3 @@
     "consumers": [{ "queue": "appforge-builds-local", "max_batch_size": 1, "max_batch_timeout": 1 }]
   }
 }
-

@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "appforge",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/preview/*", "/run/*", "/apps/*", "/og/*"]
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "AUTH_MODE": "access",
+    "ANTHROPIC_MODEL": "claude-sonnet-5",
+    "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
+    "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222",
+    "WFP_NAMESPACE": "appforge-apps"
+  },
+  "browser": { "binding": "BROWSER" },
+  "dispatch_namespaces": [
+    { "binding": "DISPATCHER", "namespace": "appforge-apps" }
+  ],
+  "d1_databases": [
+    { "binding": "DB", "database_name": "appforge-db", "database_id": "5d47da52-df9b-4805-ba3d-b227971051e5", "migrations_dir": "migrations" }
+  ],
+  "r2_buckets": [
+    { "binding": "THUMBNAILS", "bucket_name": "appforge-thumbnails" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "BUILDS", "queue": "appforge-builds" }],
+    "consumers": [{ "queue": "appforge-builds", "max_batch_size": 1, "max_batch_timeout": 2, "max_retries": 3, "dead_letter_queue": "appforge-builds-dlq" }]
+  }
+}

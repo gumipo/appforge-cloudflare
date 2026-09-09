@@ -1,7 +1,66 @@
 export type AppStatus = "queued" | "building" | "ready" | "failed";
+export type VersionStatus = "queued" | "building" | "ready" | "published" | "failed" | "archived";
+
+export interface UserSummary {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+}
+
+export interface TenantSummary {
+  id: string;
+  slug: string;
+  name: string;
+  role: "owner" | "admin" | "editor" | "viewer";
+}
+
+export interface SessionInfo {
+  user: UserSummary;
+  tenant: TenantSummary;
+  tenants: TenantSummary[];
+  authMode: "development" | "access";
+}
+
+export interface WorkspaceMember {
+  id: string;
+  email: string;
+  name: string;
+  avatarUrl: string | null;
+  role: TenantSummary["role"];
+  joinedAt: string;
+}
+
+export interface WorkspaceInvite {
+  id: string;
+  email: string;
+  role: Exclude<TenantSummary["role"], "owner">;
+  status: "pending" | "accepted" | "revoked";
+  createdAt: string;
+}
+
+export interface AppVersionSummary {
+  id: string;
+  appId: string;
+  versionNumber: number;
+  status: VersionStatus;
+  title: string;
+  description: string;
+  summary: string;
+  prompt: string;
+  sourceKey: string | null;
+  previewUrl: string | null;
+  thumbnailUrl: string | null;
+  errorMessage: string | null;
+  basedOnVersionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
 
 export interface AppSummary {
   id: string;
+  tenantId: string;
   slug: string;
   title: string;
   prompt: string;
@@ -10,6 +69,10 @@ export interface AppSummary {
   previewUrl: string | null;
   thumbnailUrl: string | null;
   errorMessage: string | null;
+  latestVersionId: string | null;
+  publishedVersionId: string | null;
+  latestVersionNumber: number | null;
+  publishedVersionNumber: number | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -24,6 +87,7 @@ export interface ChatMessage {
 
 export interface AppDetail extends AppSummary {
   messages: ChatMessage[];
+  versions: AppVersionSummary[];
 }
 
 export interface CreateAppRequest {
@@ -33,4 +97,3 @@ export interface CreateAppRequest {
 export interface CreateAppResponse {
   app: AppDetail;
 }
-

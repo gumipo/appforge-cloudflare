@@ -7,19 +7,21 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "run_worker_first": ["/api/*", "/preview/*", "/apps/*"]
+    "run_worker_first": ["/api/*", "/preview/*", "/run/*", "/apps/*", "/og/*"]
   },
   "vars": {
     "ENVIRONMENT": "production",
-    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+    "AUTH_MODE": "access",
+    "ANTHROPIC_MODEL": "claude-sonnet-5",
+    "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
+    "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222"
   },
-  "ai": { "binding": "AI" },
   "browser": { "binding": "BROWSER" },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "appforge-db",
-      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "database_id": "5d47da52-df9b-4805-ba3d-b227971051e5",
       "migrations_dir": "migrations"
     }
   ],
@@ -31,4 +33,3 @@
     "consumers": [{ "queue": "appforge-builds", "max_batch_size": 1, "max_batch_timeout": 2, "max_retries": 3, "dead_letter_queue": "appforge-builds-dlq" }]
   }
 }
-

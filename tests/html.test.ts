@@ -6,8 +6,21 @@ describe("generated app HTML", () => {
   it("adds metadata and a restrictive CSP", () => {
     const prepared = prepareGeneratedHtml("<html><head><title>Test</title></head><body>Hello</body></html>", "Demo", "Description");
     expect(prepared).toContain('property="og:title" content="Demo"');
-    expect(prepared).toContain("connect-src 'none'");
+    expect(prepared).toContain("connect-src 'self'");
     expect(prepared).toMatch(/^<!doctype html>/i);
+  });
+
+  it("injects the tenant-scoped runtime client for generated apps", () => {
+    const prepared = prepareGeneratedHtml("<html><head></head><body></body></html>", "Demo", "Description", {
+      appId: "app-123",
+      versionId: "version-2",
+      origin: "https://builder.example.com",
+      token: "test-runtime-token",
+    });
+    expect(prepared).toContain("window.AppForge");
+    expect(prepared).toContain("/api/runtime/apps/");
+    expect(prepared).toContain('versionId="version-2"');
+    expect(prepared).toContain("x-appforge-runtime-token");
   });
 
   it("escapes values injected into the shell page", () => {

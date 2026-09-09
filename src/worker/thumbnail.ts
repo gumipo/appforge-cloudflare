@@ -8,12 +8,13 @@ function fallbackThumbnail(title: string, description: string): string {
 export async function createThumbnail(
   env: Env,
   appId: string,
+  versionId: string,
   targetUrl: string,
   title: string,
   description: string,
 ): Promise<string | null> {
   if (!env.THUMBNAILS) return null;
-  const key = `apps/${appId}/og.png`;
+  const key = `apps/${appId}/versions/${versionId}/og.png`;
 
   if (env.BROWSER && targetUrl.startsWith("https://")) {
     try {
@@ -34,10 +35,9 @@ export async function createThumbnail(
     }
   }
 
-  const svgKey = `apps/${appId}/og.svg`;
+  const svgKey = `apps/${appId}/versions/${versionId}/og.svg`;
   await env.THUMBNAILS.put(svgKey, fallbackThumbnail(title, description), {
     httpMetadata: { contentType: "image/svg+xml", cacheControl: "public, max-age=3600" },
   });
   return svgKey;
 }
-

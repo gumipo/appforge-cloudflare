@@ -1,6 +1,8 @@
 import { escapeHtml } from "./html";
 import type { GeneratedApp } from "./types";
 
+type TemplateResult = Pick<GeneratedApp, "title" | "description" | "html">;
+
 export function titleFromPrompt(prompt: string): string {
   const cleaned = prompt
     .replace(/[。、.!?！？].*$/s, "")
@@ -21,7 +23,7 @@ const baseStyles = `
   @media(max-width:700px){.nav{padding:0 20px}.nav small{display:none}}
 `;
 
-function todoTemplate(title: string, prompt: string): GeneratedApp {
+function todoTemplate(title: string, prompt: string): TemplateResult {
   const safeTitle = escapeHtml(title);
   const safePrompt = escapeHtml(prompt);
   return {
@@ -43,7 +45,7 @@ function todoTemplate(title: string, prompt: string): GeneratedApp {
   };
 }
 
-function productTemplate(title: string, prompt: string): GeneratedApp {
+function productTemplate(title: string, prompt: string): TemplateResult {
   const safeTitle = escapeHtml(title);
   const safePrompt = escapeHtml(prompt);
   return {
@@ -57,8 +59,21 @@ function productTemplate(title: string, prompt: string): GeneratedApp {
 
 export function createFallbackApp(prompt: string): GeneratedApp {
   const title = titleFromPrompt(prompt);
-  return /(todo|to-do|タスク|やること|task)/i.test(prompt)
+  const todo = /(todo|to-do|タスク|やること|task|勤怠|出勤|退勤)/i.test(prompt);
+  const result = todo
     ? todoTemplate(title, prompt)
     : productTemplate(title, prompt);
+  return {
+    ...result,
+    summary: todo ? "Created an interactive task-oriented application." : "Created a polished responsive product experience.",
+    files: [{ path: "index.html", content: result.html }],
+    dataModel: todo ? [{
+      name: "tasks",
+      fields: [
+        { name: "title", type: "text", required: true },
+        { name: "status", type: "text", required: true },
+        { name: "completedAt", type: "datetime", required: false },
+      ],
+    }] : [],
+  };
 }
-

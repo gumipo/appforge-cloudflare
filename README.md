@@ -1,105 +1,97 @@
 # AppForge
 
-チャットでアイデアを伝えると、動くWebアプリを生成し、Cloudflare Workersへ公開して、OGP画像付きのギャラリーに並べるMVPです。
+チャットで要件を壁打ちし、Claudeが動くWebアプリを生成し、プレビュー・公開・機能追加・ロールバックまで行うCloudflareネイティブのアプリビルダーです。
 
-![AppForge architecture](https://img.shields.io/badge/Cloudflare-Workers%20%7C%20D1%20%7C%20Queues%20%7C%20R2%20%7C%20Browser%20Run-F38020?style=flat-square)
+## 実装済み
 
-## できること
+- Claude APIによるアプリ生成（APIキー未設定のローカル環境では決定的なフォールバック生成）
+- 会話を続けるたびに不変の新バージョンを作成
+- バージョン別プレビュー、公開、旧版へのロールバック、ソース成果物のダウンロード
+- Cloudflare Access JWT検証による本番認証
+- ワークスペース（tenant）、owner / admin / editor / viewer、メール招待
+- tenant / app単位に分離された共通データAPI
+- 生成アプリ専用のハッシュ化されたランタイムトークン
+- D1の会話・バージョン・監査・AI利用量・業務データ保存
+- Queuesによる非同期ビルド、R2へのソース成果物とOGP画像保存
+- Browser Renderingによる1200×630サムネイル（利用できない環境ではSVGへフォールバック）
+- 通常のWorkers APIとWorkers for Platforms dispatch namespaceの両方に対応
+- OGP付き共有ページとテナント内ギャラリー
 
-- チャットから自己完結型HTMLアプリを生成
-- ローカルでは外部キーなしの決定的テンプレート生成
-- 本番ではWorkers AIを使ったUI生成
-- D1にアプリ、会話、ビルド履歴を保存
-- Queuesで生成・デプロイを非同期実行
-- Cloudflare APIで生成アプリを個別Workerとして公開
-- Browser Runで1200×630のOGP画像を撮影し、R2へ保存
-- 生成アプリの一覧、ライブプレビュー、追加指示による再生成
-- `/apps/:slug` に動的OGPメタデータを挿入
+勤怠管理、申請管理、簡易CRM、TODO、ダッシュボードなど、構造化された業務データを扱う生成アプリは`window.AppForge.data`を通じてデータを永続化できます。アプリを再生成しても、同じ`appId`のデータは残ります。
 
-## ローカルで起動
+## ローカル起動
 
-必要なものはNode.js 20以降です。ローカルモードではCloudflareへのログインやAPIキーは不要です。
+Node.js 20以降が必要です。
 
 ```bash
 npm install
+cp .dev.vars.example .dev.vars
 npm run dev
 ```
 
-- Web UI: <http://localhost:5173>
+- UI: <http://localhost:5173>
 - Worker API: <http://localhost:8787>
-- 初回起動時にローカルD1マイグレーションが自動適用されます。
+- 初回起動時にローカルD1マイグレーションを自動適用
+- `ANTHROPIC_API_KEY`が空なら外部通信せず、ローカル用テンプレートで生成
 
-`npm run dev` はViteとWranglerを同時に起動します。ローカル生成物は同一Workerの `/preview/:id` で配信され、サムネイルはローカルR2へ保存されます。
+Claudeで生成する場合は`.dev.vars`へ次だけ設定します。
 
-## 構成
+```dotenv
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-5
+```
+
+## 主要フロー
 
 ```text
-Browser / React UI
-        │
-        ▼
-AppForge Worker (Hono)
-  ├─ D1: apps / messages / builds
-  ├─ Queue: build jobs
-  ├─ Workers AI: self-contained HTML generation
-  ├─ Cloudflare Workers API: generated Worker upload
-  ├─ Browser Run: 1200×630 screenshot
-  └─ R2: OGP image storage
+React chat UI
+  └─ AppForge Worker
+      ├─ Cloudflare Access: user authentication
+      ├─ D1: tenants / apps / versions / chat / audit / app records
+      ├─ Queue: version build jobs
+      ├─ Claude API (optionally through AI Gateway): source generation
+      ├─ R2: immutable source artifacts + OGP images
+      ├─ Browser Rendering: screenshots
+      └─ Workers API or Workers for Platforms: preview / production deploy
 ```
 
-MCPはこのリポジトリの作成・運用を支援する開発側のインターフェースです。実際のAppForgeサービスは、ユーザーのリクエストごとにMCPクライアントを起動せず、CloudflareのbindingsとREST APIを直接利用します。
+MCPはAppForge自体を開発・運用するために利用できますが、エンドユーザーからの各生成リクエストはMCPプロセスを起動せず、WorkerからClaude APIとCloudflare APIを直接呼びます。
 
-## 本番Cloudflareの準備
+詳しい境界とデータモデルは[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、本番手順は[docs/PRODUCTION.md](docs/PRODUCTION.md)を参照してください。
 
-1. Cloudflareへログインします。
-
-   ```bash
-   npx wrangler login
-   ```
-
-2. リソースを作ります。
-
-   ```bash
-   npx wrangler d1 create appforge-db
-   npx wrangler r2 bucket create appforge-thumbnails
-   npx wrangler queues create appforge-builds
-   npx wrangler queues create appforge-builds-dlq
-   ```
-
-3. D1作成結果の`database_id`を `wrangler.jsonc` の `REPLACE_WITH_D1_DATABASE_ID` と置き換えます。
-
-4. 生成Workerを公開するための値をSecretsへ登録します。
-
-   ```bash
-   npx wrangler secret put CLOUDFLARE_ACCOUNT_ID
-   npx wrangler secret put CLOUDFLARE_API_TOKEN
-   npx wrangler secret put CF_WORKERS_SUBDOMAIN
-   ```
-
-   API Tokenには最小限 `Workers Scripts: Edit` 相当の権限を付けます。`CF_WORKERS_SUBDOMAIN` は `.workers.dev` を除いたアカウントのサブドメインです。
-
-5. DBを初期化してデプロイします。
-
-   ```bash
-   npm run db:migrate:remote
-   npm run deploy
-   ```
-
-本番のWorkers AIとBrowser Runは `wrangler.jsonc` のbindingsで有効になります。現在のモデルは `@cf/meta/llama-3.3-70b-instruct-fp8-fast` で、`AI_MODEL`から変更できます。
-
-## 品質チェック
+## コマンド
 
 ```bash
-npm run typecheck
-npm test
-npm run build
+npm run dev                 # ローカルD1を更新してUI + Workerを起動
+npm run typecheck           # TypeScript
+npm test                    # Vitest
+npm run build               # UI production build
+npm run db:migrate:remote   # 本番D1 migration
+npm run deploy              # 通常のWorkers構成
+npm run deploy:platform     # Workers for Platforms構成（有料）
 ```
+
+## 生成アプリのランタイムAPI
+
+Claudeへは次のAPIを使うよう指示しています。生成HTMLへ安全なクライアントが自動注入されます。
+
+```js
+const rows = await window.AppForge.data.list("shifts");
+const row = await window.AppForge.data.create("shifts", { employee: "A", clockIn: "09:00" });
+await window.AppForge.data.update("shifts", row.id, { employee: "A", clockOut: "18:00" });
+await window.AppForge.data.remove("shifts", row.id);
+```
+
+各トークンは1アプリだけに限定され、サーバー側ではtenant / app / collectionを常に条件へ含めます。業務用途ではCloudflare Accessで公開URL自体も保護してください。
 
 ## セキュリティ上の境界
 
-- 生成対象は500KB以下のHTML/CSS/JSに限定しています。
-- 生成アプリは通信を禁止するCSP付きで、管理画面では`allow-same-origin`なしのsandbox iframeに表示します。
-- ユーザー入力をWorkerソースとして直接評価せず、信頼済みの配信ラッパーへHTML文字列として埋め込みます。
-- API TokenはWorker Secretとして保存し、クライアントへ返しません。
+- 管理APIはCloudflare Access JWTのissuer / audience / signatureを検証
+- mutationは同一originまたはアプリ専用トークンのみ許可
+- HTMLは500KB、レコードは64KB、collectionは許可文字、一覧は最大1,000件
+- ユーザーHTMLをWorkerコードとして直接評価せず、信頼済み配信ラッパーへ文字列として格納
+- APIキーはWorker Secretsに保存し、管理UIへ返さない
+- 生成物はCSPとsandbox iframeでプレビュー
+- AI利用量と管理操作をD1へ記録
 
-このMVPは匿名・単一ワークスペース向けです。一般公開前にCloudflare Access/Auth、ユーザー単位の所有権、レート制限、コンテンツモデレーション、クォータ、Worker削除ライフサイクルを追加してください。大量のユーザーコードを運用する段階では、アカウント直下にWorkerを増やす方式から **Cloudflare Workers for Platforms / dispatch namespace** へ移行するのが適切です。
-
+公開前にはCloudflare Access policy、API Tokenの最小権限、レート制限、利用量上限、バックアップ・削除ポリシーを組織要件に合わせて設定してください。

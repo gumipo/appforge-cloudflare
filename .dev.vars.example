@@ -2,4 +2,16 @@
 CLOUDFLARE_ACCOUNT_ID=your_account_id
 CLOUDFLARE_API_TOKEN=token_with_workers_scripts_write
 CF_WORKERS_SUBDOMAIN=your_workers_dev_subdomain
+ANTHROPIC_API_KEY=your_anthropic_api_key
+ANTHROPIC_MODEL=claude-sonnet-5
 
+# Required when AUTH_MODE=access
+CF_ACCESS_TEAM_DOMAIN=your-team.cloudflareaccess.com
+CF_ACCESS_AUD=your_access_application_audience
+
+# Optional: route Claude through Cloudflare AI Gateway
+ANTHROPIC_BASE_URL=https://gateway.ai.cloudflare.com/v1/your_account_id/your_gateway_id/anthropic
+AI_GATEWAY_TOKEN=your_gateway_token
+
+# Optional paid Workers for Platforms runtime
+WFP_NAMESPACE=appforge-apps

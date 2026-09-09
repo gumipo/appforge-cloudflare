@@ -12,6 +12,7 @@
     "dev:worker": "wrangler dev --config wrangler.local.jsonc --port 8787 --var ENVIRONMENT:development",
     "build": "vite build",
     "deploy": "npm run build && wrangler deploy",
+    "deploy:platform": "npm run build && wrangler deploy --config wrangler.platform.jsonc",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -21,6 +22,7 @@
   },
   "dependencies": {
     "hono": "^4.13.7",
+    "jose": "^6.2.12",
     "lucide-react": "^1.43.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

@@ -1,57 +1,111 @@
 import { stripCodeFence } from "./html";
 import { createFallbackApp } from "./templates";
-import type { Env, GeneratedApp } from "./types";
+import type { AppArtifact, Env, GeneratedApp } from "./types";
 
-const SYSTEM_PROMPT = `You are a senior product designer and frontend engineer building a small, polished web app.
-Return JSON only with exactly three string fields: title, description, html.
-The html must be a complete self-contained HTML document with inline CSS and JavaScript.
-Do not use external assets, fetch, network requests, CDNs, iframes, eval, or dynamic script creation.
+const SYSTEM_PROMPT = `You are the code generation engine for AppForge, a production app builder.
+Return strict JSON only with these fields:
+{
+  "title": string,
+  "description": string,
+  "summary": string,
+  "html": string,
+  "files": [{"path": string, "content": string}],
+  "dataModel": [{"name": string, "fields": [{"name": string, "type": "text"|"number"|"boolean"|"date"|"datetime", "required": boolean}]}]
+}
+The html must be a complete self-contained HTML document with inline CSS and JavaScript and must also be present as files[index.html].
+Do not use external assets, arbitrary network requests, CDNs, iframes, eval, or dynamic script creation.
+For persistent application data, use the preinstalled runtime only: window.AppForge.data.list(collection), create(collection, data), update(collection, id, data), and remove(collection, id). These return promises and are authenticated, tenant-scoped APIs. Never use localStorage for domain data. Use stable lowercase collection names matching the dataModel names. Show useful loading, empty, and error states.
 Make the UI responsive, accessible, visually distinctive, and genuinely interactive.
-Keep all visible copy concise. The generated page runs in a sandbox.`;
+For revisions, preserve existing useful behavior and implement the requested change instead of replacing the product concept.
+Keep paths relative, never include secrets, and keep total output under 450 KB.`;
 
-function parseGenerated(value: unknown): GeneratedApp | null {
-  const candidate = value && typeof value === "object" && "response" in value
-    ? (value as { response: unknown }).response
-    : value;
-  if (typeof candidate === "object" && candidate !== null) {
-    const object = candidate as Partial<GeneratedApp>;
-    if (typeof object.title === "string" && typeof object.description === "string" && typeof object.html === "string") {
-      return object as GeneratedApp;
-    }
-  }
-  if (typeof candidate !== "string") return null;
+interface ClaudeMessageResponse {
+  content?: Array<{ type?: string; text?: string }>;
+  usage?: { input_tokens?: number; output_tokens?: number };
+}
+
+function isSafePath(path: string): boolean {
+  return Boolean(path) && !path.startsWith("/") && !path.includes("..") && !path.includes("\\");
+}
+
+function normalizeGenerated(parsed: Partial<GeneratedApp>): GeneratedApp | null {
+  if (typeof parsed.title !== "string" || typeof parsed.description !== "string" || typeof parsed.html !== "string") return null;
+  const files = Array.isArray(parsed.files)
+    ? parsed.files.filter((file): file is { path: string; content: string } => Boolean(file) && typeof file.path === "string" && typeof file.content === "string" && isSafePath(file.path)).slice(0, 40)
+    : [];
+  if (!files.some((file) => file.path === "index.html")) files.unshift({ path: "index.html", content: parsed.html });
+  const allowedTypes = new Set(["text", "number", "boolean", "date", "datetime"]);
+  const dataModel = Array.isArray(parsed.dataModel) ? parsed.dataModel.flatMap((collection) => {
+    if (!collection || typeof collection.name !== "string" || !/^[a-z][a-z0-9_-]{0,47}$/.test(collection.name)) return [];
+    const fields = Array.isArray(collection.fields) ? collection.fields.flatMap((field) => {
+      if (!field || typeof field.name !== "string" || !/^[a-z][a-zA-Z0-9_]{0,47}$/.test(field.name) || !allowedTypes.has(field.type)) return [];
+      return [{ name: field.name, type: field.type, required: field.required === true }];
+    }).slice(0, 40) : [];
+    return [{ name: collection.name, fields }];
+  }).slice(0, 20) as GeneratedApp["dataModel"] : [];
+  return {
+    title: parsed.title.slice(0, 80),
+    description: parsed.description.slice(0, 240),
+    summary: typeof parsed.summary === "string" ? parsed.summary.slice(0, 500) : "Generated a new application version.",
+    html: parsed.html,
+    files,
+    dataModel,
+  };
+}
+
+function parseGenerated(value: string): GeneratedApp | null {
   try {
-    const parsed = JSON.parse(stripCodeFence(candidate)) as Partial<GeneratedApp>;
-    if (typeof parsed.title === "string" && typeof parsed.description === "string" && typeof parsed.html === "string") {
-      return parsed as GeneratedApp;
-    }
+    return normalizeGenerated(JSON.parse(stripCodeFence(value)) as Partial<GeneratedApp>);
   } catch {
     return null;
   }
-  return null;
 }
 
-export async function generateApp(env: Env, prompt: string, previousHtml?: string | null): Promise<GeneratedApp> {
-  if (!env.AI) return createFallbackApp(prompt);
+function claudeEndpoint(env: Env): string | null {
+  const base = env.ANTHROPIC_BASE_URL?.replace(/\/$/, "");
+  if (base) return `${base}/v1/messages`;
+  return env.ANTHROPIC_API_KEY ? "https://api.anthropic.com/v1/messages" : null;
+}
 
-  const revisionContext = previousHtml
-    ? `\nThis is a revision. Preserve useful behavior from the prior app while applying the new request.\nPrior HTML:\n${previousHtml.slice(0, 80_000)}`
+export async function generateApp(
+  env: Env,
+  prompt: string,
+  previousArtifact: AppArtifact | null,
+  usage: { tenantId: string; appId: string; versionId: string },
+): Promise<GeneratedApp> {
+  const endpoint = claudeEndpoint(env);
+  if (!endpoint || (!env.ANTHROPIC_API_KEY && !env.AI_GATEWAY_TOKEN)) return createFallbackApp(prompt);
+
+  const previous = previousArtifact
+    ? `\n<previous_artifact>\n${JSON.stringify(previousArtifact).slice(0, 220_000)}\n</previous_artifact>`
     : "";
+  const headers = new Headers({ "content-type": "application/json", "anthropic-version": "2023-06-01" });
+  if (env.ANTHROPIC_API_KEY) headers.set("x-api-key", env.ANTHROPIC_API_KEY);
+  if (env.AI_GATEWAY_TOKEN) headers.set("cf-aig-authorization", `Bearer ${env.AI_GATEWAY_TOKEN}`);
+  const model = env.ANTHROPIC_MODEL ?? "claude-sonnet-5";
 
   try {
-    const result = await env.AI.run(env.AI_MODEL ?? "@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `<user_request>\n${prompt}\n</user_request>${revisionContext}` },
-      ],
-      max_tokens: 8_000,
-      temperature: 0.45,
-      response_format: { type: "json_object" },
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        model,
+        max_tokens: 16_000,
+        system: SYSTEM_PROMPT,
+        messages: [{ role: "user", content: `<user_request>\n${prompt}\n</user_request>${previous}` }],
+      }),
     });
-    return parseGenerated(result) ?? createFallbackApp(prompt);
+    const payload = await response.json() as ClaudeMessageResponse & { error?: { message?: string } };
+    if (!response.ok) throw new Error(payload.error?.message ?? `Claude API returned ${response.status}`);
+    const text = payload.content?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("") ?? "";
+    const generated = parseGenerated(text);
+    if (!generated) throw new Error("Claude returned an invalid application artifact.");
+    await env.DB.prepare(`INSERT INTO ai_usage (id, tenant_id, app_id, version_id, provider, model, input_tokens, output_tokens, created_at)
+      VALUES (?, ?, ?, ?, 'anthropic', ?, ?, ?, ?)`)
+      .bind(crypto.randomUUID(), usage.tenantId, usage.appId, usage.versionId, model, payload.usage?.input_tokens ?? 0, payload.usage?.output_tokens ?? 0, new Date().toISOString()).run();
+    return generated;
   } catch (error) {
-    console.warn("Workers AI generation failed; using the deterministic fallback.", error);
+    console.error("Claude generation failed; using the deterministic fallback.", error);
     return createFallbackApp(prompt);
   }
 }
-

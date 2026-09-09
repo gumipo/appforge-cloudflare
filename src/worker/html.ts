@@ -13,7 +13,20 @@ export function stripCodeFence(value: string): string {
   return value.trim().replace(/^```(?:html|json)?\s*/i, "").replace(/\s*```$/, "");
 }
 
-export function prepareGeneratedHtml(html: string, title: string, description: string): string {
+function runtimeClient(appId: string, versionId: string, origin: string, token: string): string {
+  const safeAppId = JSON.stringify(appId);
+  const safeVersionId = JSON.stringify(versionId);
+  const safeOrigin = JSON.stringify(origin.replace(/\/$/, ""));
+  const safeToken = JSON.stringify(token);
+  return `<script>(()=>{const appId=${safeAppId},versionId=${safeVersionId},runtimeOrigin=${safeOrigin},token=${safeToken};const root=runtimeOrigin+'/api/runtime/apps/'+encodeURIComponent(appId)+'/';async function call(path,init){const response=await fetch(root+path,{credentials:location.origin===runtimeOrigin?'same-origin':'omit',...init,headers:{'content-type':'application/json','x-appforge-runtime-token':token,...(init&&init.headers||{})}});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'AppForge data request failed');return payload;}window.AppForge=Object.freeze({appId,versionId,session:()=>call('session').then(v=>v.session),data:Object.freeze({list:(collection)=>call('data/'+encodeURIComponent(collection)).then(v=>v.records),create:(collection,data)=>call('data/'+encodeURIComponent(collection),{method:'POST',body:JSON.stringify({data})}).then(v=>v.record),update:(collection,id,data)=>call('data/'+encodeURIComponent(collection)+'/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({data})}).then(v=>v.record),remove:(collection,id)=>call('data/'+encodeURIComponent(collection)+'/'+encodeURIComponent(id),{method:'DELETE'})})});})();</script>`;
+}
+
+export function prepareGeneratedHtml(
+  html: string,
+  title: string,
+  description: string,
+  runtime?: { appId: string; versionId: string; origin: string; token: string },
+): string {
   let output = stripCodeFence(html);
   if (!/^<!doctype html>/i.test(output)) output = `<!doctype html>\n${output}`;
 
@@ -26,7 +39,8 @@ export function prepareGeneratedHtml(html: string, title: string, description: s
     `<meta property="og:description" content="${safeDescription}">`,
     `<meta property="og:type" content="website">`,
     `<meta name="twitter:card" content="summary_large_image">`,
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; connect-src 'none'; media-src data:;">`,
+    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: https:; font-src data:; connect-src 'self'${runtime ? ` ${escapeHtml(runtime.origin)}` : ""}; media-src data:;">`,
+    runtime ? runtimeClient(runtime.appId, runtime.versionId, runtime.origin, runtime.token) : "",
   ].join("\n");
 
   if (/<head[^>]*>/i.test(output)) {
@@ -57,4 +71,3 @@ export function injectSocialMetadata(
   ].join("\n");
   return document.replace("<!--app-meta-->", tags);
 }
-

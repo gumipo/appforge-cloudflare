@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
+  Building2,
   Check,
   ChevronDown,
   Clock3,
@@ -15,12 +16,14 @@ import {
   Send,
   Share2,
   Sparkles,
+  UserPlus,
+  Users,
   WandSparkles,
   X,
   Zap,
 } from "lucide-react";
-import type { AppDetail, AppStatus, AppSummary, ChatMessage } from "../shared/types";
-import { createApp, fetchApp, fetchApps, reviseApp } from "./api";
+import type { AppDetail, AppStatus, AppSummary, AppVersionSummary, ChatMessage, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
+import { createApp, createWorkspace, fetchApp, fetchApps, fetchSession, fetchWorkspacePeople, inviteWorkspaceMember, publishAppVersion, reviseApp, selectTenant } from "./api";
 
 const EXAMPLES = [
   "ミニマルなTODOアプリを作って",
@@ -84,7 +87,7 @@ function AppCard({ app, onOpen }: { app: AppSummary; onOpen: () => void }) {
     <button className="app-card" onClick={onOpen}>
       <div className="card-preview">
         {app.thumbnailUrl ? <img src={app.thumbnailUrl} alt="" /> : <div className="card-placeholder"><Sparkles size={24} /><span>Building preview</span></div>}
-        <span className={`card-status ${app.status}`}>{statusIcon(app.status)}{app.status}</span>
+        <span className={`card-status ${app.status}`}>{statusIcon(app.status)}v{app.latestVersionNumber ?? 1} · {app.status}</span>
         <span className="open-overlay">開く <ArrowRight size={14} /></span>
       </div>
       <div className="card-copy">
@@ -97,12 +100,22 @@ function AppCard({ app, onOpen }: { app: AppSummary; onOpen: () => void }) {
 
 export function App() {
   const [apps, setApps] = useState<AppSummary[]>([]);
+  const [session, setSession] = useState<SessionInfo | null>(null);
   const [selected, setSelected] = useState<AppDetail | null>(null);
+  const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [prompt, setPrompt] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [members, setMembers] = useState<WorkspaceMember[]>([]);
+  const [invites, setInvites] = useState<WorkspaceInvite[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<WorkspaceInvite["role"]>("editor");
+  const [workspaceName, setWorkspaceName] = useState("");
+  const [settingsBusy, setSettingsBusy] = useState(false);
+  const [settingsMessage, setSettingsMessage] = useState<string | null>(null);
   const conversationRef = useRef<HTMLDivElement>(null);
 
   const loadApps = useCallback(async () => {
@@ -115,12 +128,14 @@ export function App() {
     setError(null);
     const detail = await fetchApp(summary.id);
     setSelected(detail);
+    setActiveVersionId(detail.latestVersionId);
     if (updateHistory) window.history.pushState({}, "", `/apps/${summary.slug}`);
   }, []);
 
   useEffect(() => {
     void (async () => {
       try {
+        setSession(await fetchSession());
         const list = await loadApps();
         const match = window.location.pathname.match(/^\/apps\/([^/]+)/);
         if (match) {
@@ -140,6 +155,7 @@ export function App() {
     const timer = window.setInterval(() => {
       void fetchApp(selected.id).then((detail) => {
         setSelected(detail);
+        if (detail.latestVersionId && detail.status === "ready") setActiveVersionId(detail.latestVersionId);
         if (detail.status === "ready" || detail.status === "failed") void loadApps();
       }).catch(() => undefined);
     }, 1_200);
@@ -163,6 +179,7 @@ export function App() {
     try {
       const detail = selected ? await reviseApp(selected.id, value) : await createApp(value);
       setSelected(detail);
+      setActiveVersionId(detail.latestVersionId);
       window.history.pushState({}, "", `/apps/${detail.slug}`);
       await loadApps();
     } catch (cause) {
@@ -175,6 +192,7 @@ export function App() {
 
   const startNew = () => {
     setSelected(null);
+    setActiveVersionId(null);
     setPrompt("");
     setError(null);
     window.history.pushState({}, "", "/");
@@ -188,6 +206,81 @@ export function App() {
   };
 
   const recentApps = useMemo(() => apps.slice(0, 6), [apps]);
+  const activeVersion = useMemo<AppVersionSummary | null>(() => {
+    if (!selected) return null;
+    return selected.versions.find((version) => version.id === activeVersionId) ?? selected.versions[0] ?? null;
+  }, [selected, activeVersionId]);
+
+  const handlePublish = async () => {
+    if (!selected || !activeVersion || activeVersion.status === "building" || activeVersion.status === "queued") return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const detail = await publishAppVersion(selected.id, activeVersion.id);
+      setSelected(detail);
+      await loadApps();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "公開に失敗しました。");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const switchTenant = async (id: string) => {
+    selectTenant(id);
+    setSelected(null);
+    setActiveVersionId(null);
+    setSession(await fetchSession());
+    await loadApps();
+    window.history.pushState({}, "", "/");
+  };
+
+  const openSettings = async () => {
+    setSettingsOpen(true);
+    setSettingsMessage(null);
+    if (!session || (session.tenant.role !== "owner" && session.tenant.role !== "admin")) return;
+    try {
+      const people = await fetchWorkspacePeople();
+      setMembers(people.members);
+      setInvites(people.invites);
+    } catch (cause) {
+      setSettingsMessage(cause instanceof Error ? cause.message : "メンバーを読み込めませんでした。");
+    }
+  };
+
+  const handleInvite = async () => {
+    if (!inviteEmail.trim()) return;
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      await inviteWorkspaceMember(inviteEmail.trim(), inviteRole);
+      const people = await fetchWorkspacePeople();
+      setMembers(people.members);
+      setInvites(people.invites);
+      setInviteEmail("");
+      setSettingsMessage("招待を登録しました。相手がCloudflare Accessでログインすると参加できます。");
+    } catch (cause) {
+      setSettingsMessage(cause instanceof Error ? cause.message : "招待に失敗しました。");
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
+
+  const handleCreateWorkspace = async () => {
+    if (workspaceName.trim().length < 2) return;
+    setSettingsBusy(true);
+    setSettingsMessage(null);
+    try {
+      const tenant = await createWorkspace(workspaceName.trim());
+      setWorkspaceName("");
+      await switchTenant(tenant.id);
+      setSettingsOpen(false);
+    } catch (cause) {
+      setSettingsMessage(cause instanceof Error ? cause.message : "ワークスペースを作成できませんでした。");
+    } finally {
+      setSettingsBusy(false);
+    }
+  };
 
   return (
     <div className="app-shell">
@@ -198,9 +291,13 @@ export function App() {
           <a href="#explore">Explore</a>
         </nav>
         <div className="top-actions">
-          <span className="cloud-state"><Cloud size={14} /> Cloudflare ready</span>
+          {session && session.tenants.length > 1 ? (
+            <select className="workspace-select" value={session.tenant.id} onChange={(event) => void switchTenant(event.target.value)} aria-label="Workspace">
+              {session.tenants.map((tenant) => <option key={tenant.id} value={tenant.id}>{tenant.name}</option>)}
+            </select>
+          ) : <span className="cloud-state"><Cloud size={14} /> {session?.tenant.name ?? "Cloudflare ready"}</span>}
           <button className="new-button" onClick={startNew}><Plus size={15} /> New app</button>
-          <button className="avatar" aria-label="Account">H</button>
+          <button className="avatar" aria-label="Account and workspace settings" title={session?.user.email} onClick={() => void openSettings()}>{session?.user.name.slice(0, 1).toUpperCase() ?? "H"}</button>
         </div>
       </header>
 
@@ -252,7 +349,7 @@ export function App() {
                   disabled={buildActive}
                 />
                 <div className="composer-footer">
-                  <span><Zap size={12} /> Workers AI</span>
+                  <span><Zap size={12} /> Claude · Anthropic</span>
                   <button disabled={!canSubmit} onClick={() => void handleSubmit()} aria-label="送信">
                     {submitting ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}
                   </button>
@@ -265,20 +362,25 @@ export function App() {
           <div className="preview-panel">
             <div className="preview-toolbar">
               <div className="browser-dots"><span></span><span></span><span></span></div>
-              <div className="address"><span className={selected?.status === "ready" ? "live-dot" : "idle-dot"}></span>{selected?.previewUrl ?? "Your preview will appear here"}</div>
+              {selected && activeVersion && (
+                <select className="version-select" value={activeVersion.id} onChange={(event) => setActiveVersionId(event.target.value)} aria-label="Version">
+                  {selected.versions.map((version) => <option key={version.id} value={version.id}>v{version.versionNumber}{version.id === selected.publishedVersionId ? " · Published" : ` · ${version.status}`}</option>)}
+                </select>
+              )}
+              <div className="address"><span className={activeVersion?.previewUrl ? "live-dot" : "idle-dot"}></span>{activeVersion?.previewUrl ?? "Your preview will appear here"}</div>
               <button className="icon-button" onClick={() => selected && void fetchApp(selected.id).then(setSelected)} title="更新"><RefreshCw size={15} /></button>
-              <button className="icon-button" onClick={() => selected?.previewUrl && window.open(selected.previewUrl, "_blank")} disabled={!selected?.previewUrl} title="別タブで開く"><ExternalLink size={15} /></button>
+              <button className="icon-button" onClick={() => activeVersion?.previewUrl && window.open(activeVersion.previewUrl, "_blank")} disabled={!activeVersion?.previewUrl} title="別タブで開く"><ExternalLink size={15} /></button>
             </div>
             <div className="preview-stage">
-              {selected?.status === "ready" && selected.previewUrl ? (
+              {activeVersion?.previewUrl && (activeVersion.status === "ready" || activeVersion.status === "published") ? (
                 <iframe
-                  key={`${selected.id}-${selected.updatedAt}`}
-                  src={selected.previewUrl}
-                  title={`${selected.title} preview`}
+                  key={`${activeVersion.id}-${activeVersion.updatedAt}`}
+                  src={activeVersion.previewUrl}
+                  title={`${selected?.title ?? "App"} preview`}
                   sandbox="allow-scripts allow-forms allow-modals allow-popups"
                 />
-              ) : selected?.status === "failed" ? (
-                <div className="preview-empty failed"><X size={30} /><h2>Build paused</h2><p>{selected.errorMessage ?? "チャットからもう一度試してください。"}</p></div>
+              ) : activeVersion?.status === "failed" ? (
+                <div className="preview-empty failed"><X size={30} /><h2>Build paused</h2><p>{activeVersion.errorMessage ?? "チャットからもう一度試してください。"}</p></div>
               ) : (
                 <div className="preview-empty">
                   {buildActive ? <div className="build-orbit"><LoaderCircle className="spin" size={28} /></div> : <div className="empty-glyph"><Code2 size={27} /></div>}
@@ -288,10 +390,15 @@ export function App() {
               )}
             </div>
             <div className="preview-footer">
-              <span>{selected ? <><span className={`status-dot ${selected.status}`}></span>{STATUS_COPY[selected.status]}</> : <><Clock3 size={13} /> Waiting for an idea</>}</span>
+              <span>{activeVersion ? <><span className={`status-dot ${activeVersion.status}`}></span>v{activeVersion.versionNumber} · {activeVersion.status}</> : <><Clock3 size={13} /> Waiting for an idea</>}</span>
               <div>
                 <button onClick={() => void share()} disabled={!selected}><Share2 size={14} />{copied ? "Copied" : "Share"}</button>
-                <button className="publish" onClick={() => selected?.previewUrl && window.open(selected.previewUrl, "_blank")} disabled={!selected?.previewUrl}>Open app <ExternalLink size={13} /></button>
+                {selected && activeVersion && activeVersion.id !== selected.publishedVersionId && (
+                  <button className="publish" onClick={() => void handlePublish()} disabled={submitting || activeVersion.status !== "ready"}>
+                    {selected.publishedVersionId && activeVersion.versionNumber < (selected.latestVersionNumber ?? 0) ? `Rollback to v${activeVersion.versionNumber}` : `Publish v${activeVersion.versionNumber}`} <Cloud size={13} />
+                  </button>
+                )}
+                <button onClick={() => activeVersion?.previewUrl && window.open(activeVersion.previewUrl, "_blank")} disabled={!activeVersion?.previewUrl}>Open <ExternalLink size={13} /></button>
               </div>
             </div>
           </div>
@@ -306,6 +413,37 @@ export function App() {
           )}
         </section>
       </main>
+
+      {settingsOpen && session && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={(event) => event.target === event.currentTarget && setSettingsOpen(false)}>
+          <section className="settings-modal" role="dialog" aria-modal="true" aria-labelledby="workspace-settings-title">
+            <div className="settings-header">
+              <div><span className="settings-icon"><Building2 size={18} /></span><div><h2 id="workspace-settings-title">Workspace settings</h2><p>{session.tenant.name} · {session.tenant.role}</p></div></div>
+              <button className="icon-button" onClick={() => setSettingsOpen(false)} aria-label="Close"><X size={17} /></button>
+            </div>
+            <div className="settings-account"><span className="avatar large">{session.user.name.slice(0, 1).toUpperCase()}</span><div><b>{session.user.name}</b><span>{session.user.email}</span></div></div>
+            {(session.tenant.role === "owner" || session.tenant.role === "admin") && (
+              <div className="settings-block">
+                <div className="settings-label"><Users size={14} /><span>Members</span><small>{members.length}</small></div>
+                <div className="member-list">
+                  {members.map((member) => <div className="member-row" key={member.id}><span className="member-avatar">{member.name.slice(0, 1).toUpperCase()}</span><div><b>{member.name}</b><span>{member.email}</span></div><em>{member.role}</em></div>)}
+                  {invites.filter((invite) => invite.status === "pending").map((invite) => <div className="member-row pending" key={invite.id}><span className="member-avatar"><UserPlus size={13} /></span><div><b>{invite.email}</b><span>ログイン待ち</span></div><em>{invite.role}</em></div>)}
+                </div>
+                <div className="inline-form">
+                  <input type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="member@example.com" />
+                  <select value={inviteRole} onChange={(event) => setInviteRole(event.target.value as WorkspaceInvite["role"])}><option value="admin">Admin</option><option value="editor">Editor</option><option value="viewer">Viewer</option></select>
+                  <button onClick={() => void handleInvite()} disabled={settingsBusy || !inviteEmail.trim()}><UserPlus size={13} /> Invite</button>
+                </div>
+              </div>
+            )}
+            <div className="settings-block">
+              <div className="settings-label"><Building2 size={14} /><span>New workspace</span></div>
+              <div className="inline-form"><input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} placeholder="チーム名" /><button onClick={() => void handleCreateWorkspace()} disabled={settingsBusy || workspaceName.trim().length < 2}>Create</button></div>
+            </div>
+            {settingsMessage && <p className="settings-message">{settingsMessage}</p>}
+          </section>
+        </div>
+      )}
 
       <footer className="site-footer"><Logo /><span>Built on Cloudflare’s edge.</span><button>System status <ChevronDown size={12} /></button></footer>
     </div>

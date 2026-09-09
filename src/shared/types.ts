@@ -35,6 +35,13 @@ export interface SessionInfo {
   authMode: "development" | "access";
 }
 
+export interface HealthInfo {
+  ok: boolean;
+  environment: string;
+  aiProvider: "workers-ai" | "anthropic" | "fallback";
+  aiReady: boolean;
+}
+
 export interface WorkspaceMember {
   id: string;
   email: string;

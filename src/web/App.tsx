@@ -24,8 +24,8 @@ import {
   X,
   Zap,
 } from "lucide-react";
-import type { AppDetail, AppStatus, AppSummary, AppVersionSummary, ChatMessage, DataCollection, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
-import { createApp, createWorkspace, fetchApp, fetchApps, fetchSession, fetchWorkspacePeople, inviteWorkspaceMember, publishAppVersion, reviseApp, selectTenant } from "./api";
+import type { AppDetail, AppStatus, AppSummary, AppVersionSummary, ChatMessage, DataCollection, HealthInfo, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
+import { createApp, createWorkspace, fetchApp, fetchApps, fetchHealth, fetchSession, fetchWorkspacePeople, inviteWorkspaceMember, publishAppVersion, reviseApp, selectTenant } from "./api";
 
 const EXAMPLES = [
   "ミニマルなTODOアプリを作って",
@@ -176,6 +176,7 @@ function DataModelView({ collections, versionNumber }: { collections: DataCollec
 export function App() {
   const [apps, setApps] = useState<AppSummary[]>([]);
   const [session, setSession] = useState<SessionInfo | null>(null);
+  const [health, setHealth] = useState<HealthInfo | null>(null);
   const [selected, setSelected] = useState<AppDetail | null>(null);
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
   const [previewMode, setPreviewMode] = useState<"preview" | "data">("preview");
@@ -212,7 +213,9 @@ export function App() {
   useEffect(() => {
     void (async () => {
       try {
-        setSession(await fetchSession());
+        const [nextSession, nextHealth] = await Promise.all([fetchSession(), fetchHealth()]);
+        setSession(nextSession);
+        setHealth(nextHealth);
         const list = await loadApps();
         const match = window.location.pathname.match(/^\/apps\/([^/]+)/);
         if (match) {
@@ -427,7 +430,7 @@ export function App() {
                   disabled={buildActive}
                 />
                 <div className="composer-footer">
-                  <span><Zap size={12} /> Claude · Anthropic</span>
+                  <span><Zap size={12} />{health?.aiProvider === "anthropic" ? "Claude · Anthropic" : health?.aiProvider === "fallback" ? "Local fallback" : "Workers AI · Qwen"}</span>
                   <button disabled={!canSubmit} onClick={() => void handleSubmit()} aria-label="送信">
                     {submitting ? <LoaderCircle className="spin" size={17} /> : <Send size={17} />}
                   </button>

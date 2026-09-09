@@ -1,6 +1,9 @@
-# Free mode is the safe default. Generated apps are served by AppForge itself.
-FREE_TIER_ONLY=true
+# Workers AI is the default and does not require an API key.
+AI_PROVIDER=workers-ai
+WORKERS_AI_MODEL=@cf/qwen/qwen2.5-coder-32b-instruct
 PUBLIC_GENERATED_WORKERS=false
+
+# Optional: switch AI_PROVIDER=anthropic when moving to Claude.
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-sonnet-5
 
@@ -12,10 +15,10 @@ CF_ACCESS_AUD=your_access_application_audience
 ANTHROPIC_BASE_URL=https://gateway.ai.cloudflare.com/v1/your_account_id/your_gateway_id/anthropic
 AI_GATEWAY_TOKEN=your_gateway_token
 
-# Optional only when FREE_TIER_ONLY=false. Not needed for the free setup.
+# Required only when generated apps should be uploaded as individual Workers.
 CLOUDFLARE_ACCOUNT_ID=your_account_id
 CLOUDFLARE_API_TOKEN=token_with_workers_scripts_write
 CF_WORKERS_SUBDOMAIN=your_workers_dev_subdomain
 
-# Optional paid Workers for Platforms runtime (requires FREE_TIER_ONLY=false)
+# Optional paid Workers for Platforms runtime
 WFP_NAMESPACE=appforge-apps

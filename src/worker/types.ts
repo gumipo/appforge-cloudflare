@@ -11,12 +11,17 @@ interface BrowserBinding {
   quickAction(action: "screenshot", options: Record<string, unknown>): Promise<Response>;
 }
 
+interface WorkersAiBinding {
+  run(model: string, inputs: Record<string, unknown>): Promise<unknown>;
+}
+
 export interface Env {
   DB: D1Database;
   BUILDS?: Queue<BuildJob>;
   THUMBNAILS?: R2Bucket;
   ASSETS?: Fetcher;
   BROWSER?: BrowserBinding;
+  AI?: WorkersAiBinding;
   DISPATCHER?: { get(name: string): Fetcher };
   ENVIRONMENT?: "development" | "production";
   AUTH_MODE?: "development" | "access";
@@ -26,10 +31,11 @@ export interface Env {
   ANTHROPIC_BASE_URL?: string;
   ANTHROPIC_MODEL?: string;
   AI_GATEWAY_TOKEN?: string;
+  AI_PROVIDER?: "workers-ai" | "anthropic" | "fallback";
+  WORKERS_AI_MODEL?: string;
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CF_WORKERS_SUBDOMAIN?: string;
-  FREE_TIER_ONLY?: "true" | "false";
   PUBLIC_GENERATED_WORKERS?: "true" | "false";
   WFP_NAMESPACE?: string;
 }

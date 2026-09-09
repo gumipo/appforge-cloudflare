@@ -12,10 +12,15 @@
   "vars": {
     "ENVIRONMENT": "production",
     "AUTH_MODE": "access",
+    "AI_PROVIDER": "workers-ai",
+    "WORKERS_AI_MODEL": "@cf/qwen/qwen2.5-coder-32b-instruct",
     "ANTHROPIC_MODEL": "claude-sonnet-5",
-    "FREE_TIER_ONLY": "true",
+    "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
+    "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222",
     "PUBLIC_GENERATED_WORKERS": "false"
   },
+  "ai": { "binding": "AI" },
+  "browser": { "binding": "BROWSER" },
   "d1_databases": [
     {
       "binding": "DB",

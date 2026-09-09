@@ -1,10 +1,10 @@
 # AppForge
 
-チャットで要件を壁打ちし、Claudeが動くWebアプリを生成し、プレビュー・公開・機能追加・ロールバックまで行うCloudflareネイティブのアプリビルダーです。
+チャットで要件を壁打ちし、AIが動くWebアプリを生成し、プレビュー・公開・機能追加・ロールバックまで行うCloudflareネイティブのアプリビルダーです。現在はWorkers AIを既定にし、後からClaudeへ切り替えられます。
 
 ## 実装済み
 
-- Claude APIによるアプリ生成（APIキー未設定のローカル環境では決定的なフォールバック生成）
+- Workers AIによるアプリ生成（Claude APIへの切り替えと決定的なフォールバック生成にも対応）
 - 会話を続けるたびに不変の新バージョンを作成
 - バージョン別プレビュー、公開、旧版へのロールバック、ソース成果物のダウンロード
 - バージョンごとのコレクション・フィールド・参照関係をER図として可視化
@@ -14,7 +14,7 @@
 - 生成アプリ専用のハッシュ化されたランタイムトークン
 - D1の会話・バージョン・監査・AI利用量・業務データ保存
 - Queuesによる非同期ビルド、R2へのソース成果物とOGP画像保存
-- 無料モードのSVG OGP画像（有料モードではBrowser Renderingのスクリーンショットも選択可能）
+- Browser Renderingによる1200×630サムネイル（利用できない環境ではSVGへフォールバック）
 - 通常のWorkers APIとWorkers for Platforms dispatch namespaceの両方に対応
 - OGP付き共有ページとテナント内ギャラリー
 
@@ -33,16 +33,22 @@ npm run dev
 - UI: <http://localhost:5173>
 - Worker API: <http://localhost:8787>
 - 初回起動時にローカルD1マイグレーションを自動適用
-- `ANTHROPIC_API_KEY`が空なら外部通信せず、ローカル用テンプレートで生成
+- Workers AI bindingはローカル開発中もCloudflare上のモデルを呼び出す
 
-Claudeで生成する場合は`.dev.vars`へ次だけ設定します。
+既定モデルはCloudflare上のコード生成向けQwenです。APIキーは不要です。
 
 ```dotenv
+AI_PROVIDER=workers-ai
+WORKERS_AI_MODEL=@cf/qwen/qwen2.5-coder-32b-instruct
+```
+
+Claudeへ移行するときだけ、次を設定します。
+
+```dotenv
+AI_PROVIDER=anthropic
 ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-sonnet-5
 ```
-
-既定の`FREE_TIER_ONLY=true`では、生成アプリごとのWorker upload、Workers for Platforms、Browser Renderingを呼びません。生成物はAppForge Workerの`/preview/...`から配信され、OGPはR2へSVGとして保存されます。
 
 ## 主要フロー
 
@@ -52,13 +58,13 @@ React chat UI
       ├─ Cloudflare Access: user authentication
       ├─ D1: tenants / apps / versions / chat / audit / app records
       ├─ Queue: version build jobs
-      ├─ Claude API (optionally through AI Gateway): source generation
+      ├─ Workers AI (default) or Claude API: source generation
       ├─ R2: immutable source artifacts + OGP images
-      ├─ Free mode: SVG OGP + AppForge内プレビュー/公開
-      └─ Optional paid mode: Browser Rendering + per-app Workers
+      ├─ Browser Rendering: screenshots
+      └─ Workers API or Workers for Platforms: preview / production deploy
 ```
 
-MCPはAppForge自体を開発・運用するために利用できますが、エンドユーザーからの各生成リクエストはMCPプロセスを起動せず、WorkerからClaude APIとCloudflare APIを直接呼びます。
+MCPはAppForge自体を開発・運用するために利用できますが、エンドユーザーからの各生成リクエストはMCPプロセスを起動せず、WorkerからWorkers AI bindingまたはClaude APIを直接呼びます。
 
 詳しい境界とデータモデルは[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)、本番手順は[docs/PRODUCTION.md](docs/PRODUCTION.md)を参照してください。
 
@@ -70,13 +76,13 @@ npm run typecheck           # TypeScript
 npm test                    # Vitest
 npm run build               # UI production build
 npm run db:migrate:remote   # 本番D1 migration
-npm run deploy              # 無料モードの既定構成
-npm run deploy:platform     # 明示的に有料構成へ移行する場合のみ
+npm run deploy              # 通常のWorkers構成
+npm run deploy:platform     # Workers for Platforms構成（有料）
 ```
 
 ## 生成アプリのランタイムAPI
 
-Claudeへは次のAPIを使うよう指示しています。生成HTMLへ安全なクライアントが自動注入されます。
+生成モデルへは次のAPIを使うよう指示しています。生成HTMLへ安全なクライアントが自動注入されます。
 
 ```js
 const rows = await window.AppForge.data.list("shifts");

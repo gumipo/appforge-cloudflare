@@ -1,4 +1,4 @@
-import type { AppDetail, AppSummary, CreateAppResponse, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
+import type { AppDetail, AppSummary, CreateAppResponse, HealthInfo, SessionInfo, WorkspaceInvite, WorkspaceMember } from "../shared/types";
 
 let tenantId = typeof window !== "undefined" ? window.localStorage.getItem("appforge:tenant") : null;
 
@@ -28,6 +28,10 @@ export async function fetchSession(): Promise<SessionInfo> {
   }
   if (!tenantId) selectTenant(session.tenant.id);
   return session;
+}
+
+export async function fetchHealth(): Promise<HealthInfo> {
+  return request<HealthInfo>("/api/health");
 }
 
 export async function fetchApps(): Promise<AppSummary[]> {

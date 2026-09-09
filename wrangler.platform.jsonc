@@ -12,13 +12,15 @@
   "vars": {
     "ENVIRONMENT": "production",
     "AUTH_MODE": "access",
+    "AI_PROVIDER": "workers-ai",
+    "WORKERS_AI_MODEL": "@cf/qwen/qwen2.5-coder-32b-instruct",
     "ANTHROPIC_MODEL": "claude-sonnet-5",
     "CLOUDFLARE_ACCOUNT_ID": "a88eb27ac1ab8c1308df1d2ea6970bbb",
     "CF_WORKERS_SUBDOMAIN": "h-hayakawa1222",
-    "FREE_TIER_ONLY": "false",
     "PUBLIC_GENERATED_WORKERS": "false",
     "WFP_NAMESPACE": "appforge-apps"
   },
+  "ai": { "binding": "AI" },
   "browser": { "binding": "BROWSER" },
   "dispatch_namespaces": [
     { "binding": "DISPATCHER", "namespace": "appforge-apps" }

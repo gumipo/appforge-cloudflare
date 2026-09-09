@@ -63,7 +63,12 @@ app.use("/api/*", async (c, next) => {
   }
 });
 
-app.get("/api/health", (c) => c.json({ ok: true, environment: c.env.ENVIRONMENT ?? "production", claude: Boolean(c.env.ANTHROPIC_API_KEY || c.env.AI_GATEWAY_TOKEN) }));
+app.get("/api/health", (c) => c.json({
+  ok: true,
+  environment: c.env.ENVIRONMENT ?? "production",
+  aiProvider: c.env.AI_PROVIDER ?? (c.env.AI ? "workers-ai" : "fallback"),
+  aiReady: c.env.AI_PROVIDER === "workers-ai" ? Boolean(c.env.AI) : Boolean(c.env.ANTHROPIC_API_KEY || c.env.AI_GATEWAY_TOKEN),
+}));
 app.get("/api/session", (c) => c.json({ session: c.get("auth") }));
 
 function workspaceSlug(name: string): string {

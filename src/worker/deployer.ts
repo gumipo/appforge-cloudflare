@@ -43,9 +43,6 @@ export async function deployVersionedHtml(
   html: string,
   tags: string[] = [],
 ): Promise<DeploymentTarget | null> {
-  // Generated apps are served by the AppForge control-plane Worker in free mode.
-  // Requiring an explicit false makes accidental per-app Worker uploads impossible.
-  if (env.FREE_TIER_ONLY !== "false") return null;
   const credentials = requireProductionCredentials(env);
   if (!credentials) return null;
   const workerModule = `const html=${JSON.stringify(html)};export default{async fetch(){return new Response(html,{headers:{"content-type":"text/html; charset=utf-8","x-content-type-options":"nosniff","referrer-policy":"no-referrer","cache-control":"public, max-age=60"}})}};`;

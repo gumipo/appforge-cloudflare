@@ -2,14 +2,14 @@
 
 ## Control planeとgenerated app
 
-AppForge Workerはcontrol planeです。ユーザー、workspace、会話、バージョン、公開先、監査ログを管理します。Claudeが返す成果物は`app_versions`へ不変の版として登録し、完全なJSON artifactをR2へ保存します。
+AppForge Workerはcontrol planeです。ユーザー、workspace、会話、バージョン、公開先、監査ログを管理します。Workers AIまたはClaudeが返す成果物は`app_versions`へ不変の版として登録し、完全なJSON artifactをR2へ保存します。
 
 生成アプリはdata planeです。通常構成では個別Worker、Workers for Platforms構成ではdispatch namespaceのuser Workerとして動きます。各バージョンはAppForge runtime clientを内包し、tenant / appに限定されたAPIで業務データを読み書きします。
 
 ## Build lifecycle
 
 1. `POST /api/apps`または既存アプリのmessage APIがqueued versionを作る。
-2. Queue consumerが直前のartifactと新しい指示をClaudeへ渡す。
+2. Queue consumerが直前のartifactと新しい指示を選択中のAI providerへ渡す。
 3. 応答を検証し、CSP・OGP・runtime clientを注入する。
 4. source hashとartifactをR2へ保存する。
 5. preview Workerへアップロードし、Browser RenderingでOGPを撮影する。

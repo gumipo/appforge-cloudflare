@@ -25,6 +25,11 @@ interface ClaudeMessageResponse {
   usage?: { input_tokens?: number; output_tokens?: number };
 }
 
+interface WorkersAiResponse {
+  response?: string;
+  usage?: { prompt_tokens?: number; completion_tokens?: number };
+}
+
 function isSafePath(path: string): boolean {
   return Boolean(path) && !path.startsWith("/") && !path.includes("..") && !path.includes("\\");
 }
@@ -64,11 +69,21 @@ function normalizeGenerated(parsed: Partial<GeneratedApp>): GeneratedApp | null 
 }
 
 function parseGenerated(value: string): GeneratedApp | null {
-  try {
-    return normalizeGenerated(JSON.parse(stripCodeFence(value)) as Partial<GeneratedApp>);
-  } catch {
-    return null;
+  const stripped = stripCodeFence(value);
+  const candidates = [stripped];
+  const firstBrace = stripped.indexOf("{");
+  const lastBrace = stripped.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) candidates.push(stripped.slice(firstBrace, lastBrace + 1));
+
+  for (const candidate of candidates) {
+    try {
+      const generated = normalizeGenerated(JSON.parse(candidate) as Partial<GeneratedApp>);
+      if (generated) return generated;
+    } catch {
+      // Try the next candidate when a model adds a short preamble around the JSON.
+    }
   }
+  return null;
 }
 
 function claudeEndpoint(env: Env): string | null {
@@ -77,7 +92,61 @@ function claudeEndpoint(env: Env): string | null {
   return env.ANTHROPIC_API_KEY ? "https://api.anthropic.com/v1/messages" : null;
 }
 
-export async function generateApp(
+function requestedProvider(env: Env): "workers-ai" | "anthropic" | "fallback" {
+  if (env.AI_PROVIDER) return env.AI_PROVIDER;
+  if (env.AI) return "workers-ai";
+  return claudeEndpoint(env) ? "anthropic" : "fallback";
+}
+
+function artifactContext(previousArtifact: AppArtifact | null, maxLength: number): string {
+  if (!previousArtifact) return "";
+  return `\n<previous_artifact>\n${JSON.stringify(previousArtifact).slice(0, maxLength)}\n</previous_artifact>`;
+}
+
+async function recordUsage(
+  env: Env,
+  usage: { tenantId: string; appId: string; versionId: string },
+  provider: "workers-ai" | "anthropic",
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): Promise<void> {
+  await env.DB.prepare(`INSERT INTO ai_usage (id, tenant_id, app_id, version_id, provider, model, input_tokens, output_tokens, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(crypto.randomUUID(), usage.tenantId, usage.appId, usage.versionId, provider, model, inputTokens, outputTokens, new Date().toISOString()).run();
+}
+
+async function generateWithWorkersAi(
+  env: Env,
+  prompt: string,
+  previousArtifact: AppArtifact | null,
+  usage: { tenantId: string; appId: string; versionId: string },
+): Promise<GeneratedApp> {
+  if (!env.AI) return createFallbackApp(prompt);
+  const model = env.WORKERS_AI_MODEL ?? "@cf/qwen/qwen2.5-coder-32b-instruct";
+
+  try {
+    const payload = await env.AI.run(model, {
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: `<user_request>\n${prompt}\n</user_request>${artifactContext(previousArtifact, 60_000)}` },
+      ],
+      max_tokens: 12_000,
+      temperature: 0.2,
+    }) as WorkersAiResponse | string;
+    const text = typeof payload === "string" ? payload : payload.response ?? "";
+    const generated = parseGenerated(text);
+    if (!generated) throw new Error("Workers AI returned an invalid application artifact.");
+    const tokenUsage = typeof payload === "string" ? undefined : payload.usage;
+    await recordUsage(env, usage, "workers-ai", model, tokenUsage?.prompt_tokens ?? 0, tokenUsage?.completion_tokens ?? 0);
+    return generated;
+  } catch (error) {
+    console.error("Workers AI generation failed; using the deterministic fallback.", error);
+    return createFallbackApp(prompt);
+  }
+}
+
+async function generateWithClaude(
   env: Env,
   prompt: string,
   previousArtifact: AppArtifact | null,
@@ -86,9 +155,7 @@ export async function generateApp(
   const endpoint = claudeEndpoint(env);
   if (!endpoint || (!env.ANTHROPIC_API_KEY && !env.AI_GATEWAY_TOKEN)) return createFallbackApp(prompt);
 
-  const previous = previousArtifact
-    ? `\n<previous_artifact>\n${JSON.stringify(previousArtifact).slice(0, 220_000)}\n</previous_artifact>`
-    : "";
+  const previous = artifactContext(previousArtifact, 220_000);
   const headers = new Headers({ "content-type": "application/json", "anthropic-version": "2023-06-01" });
   if (env.ANTHROPIC_API_KEY) headers.set("x-api-key", env.ANTHROPIC_API_KEY);
   if (env.AI_GATEWAY_TOKEN) headers.set("cf-aig-authorization", `Bearer ${env.AI_GATEWAY_TOKEN}`);
@@ -110,12 +177,22 @@ export async function generateApp(
     const text = payload.content?.filter((item) => item.type === "text").map((item) => item.text ?? "").join("") ?? "";
     const generated = parseGenerated(text);
     if (!generated) throw new Error("Claude returned an invalid application artifact.");
-    await env.DB.prepare(`INSERT INTO ai_usage (id, tenant_id, app_id, version_id, provider, model, input_tokens, output_tokens, created_at)
-      VALUES (?, ?, ?, ?, 'anthropic', ?, ?, ?, ?)`)
-      .bind(crypto.randomUUID(), usage.tenantId, usage.appId, usage.versionId, model, payload.usage?.input_tokens ?? 0, payload.usage?.output_tokens ?? 0, new Date().toISOString()).run();
+    await recordUsage(env, usage, "anthropic", model, payload.usage?.input_tokens ?? 0, payload.usage?.output_tokens ?? 0);
     return generated;
   } catch (error) {
     console.error("Claude generation failed; using the deterministic fallback.", error);
     return createFallbackApp(prompt);
   }
+}
+
+export async function generateApp(
+  env: Env,
+  prompt: string,
+  previousArtifact: AppArtifact | null,
+  usage: { tenantId: string; appId: string; versionId: string },
+): Promise<GeneratedApp> {
+  const provider = requestedProvider(env);
+  if (provider === "workers-ai") return generateWithWorkersAi(env, prompt, previousArtifact, usage);
+  if (provider === "anthropic") return generateWithClaude(env, prompt, previousArtifact, usage);
+  return createFallbackApp(prompt);
 }

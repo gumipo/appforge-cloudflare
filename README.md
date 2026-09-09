@@ -14,7 +14,7 @@
 - 生成アプリ専用のハッシュ化されたランタイムトークン
 - D1の会話・バージョン・監査・AI利用量・業務データ保存
 - Queuesによる非同期ビルド、R2へのソース成果物とOGP画像保存
-- Browser Renderingによる1200×630サムネイル（利用できない環境ではSVGへフォールバック）
+- 無料モードのSVG OGP画像（有料モードではBrowser Renderingのスクリーンショットも選択可能）
 - 通常のWorkers APIとWorkers for Platforms dispatch namespaceの両方に対応
 - OGP付き共有ページとテナント内ギャラリー
 
@@ -42,6 +42,8 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 ANTHROPIC_MODEL=claude-sonnet-5
 ```
 
+既定の`FREE_TIER_ONLY=true`では、生成アプリごとのWorker upload、Workers for Platforms、Browser Renderingを呼びません。生成物はAppForge Workerの`/preview/...`から配信され、OGPはR2へSVGとして保存されます。
+
 ## 主要フロー
 
 ```text
@@ -52,8 +54,8 @@ React chat UI
       ├─ Queue: version build jobs
       ├─ Claude API (optionally through AI Gateway): source generation
       ├─ R2: immutable source artifacts + OGP images
-      ├─ Browser Rendering: screenshots
-      └─ Workers API or Workers for Platforms: preview / production deploy
+      ├─ Free mode: SVG OGP + AppForge内プレビュー/公開
+      └─ Optional paid mode: Browser Rendering + per-app Workers
 ```
 
 MCPはAppForge自体を開発・運用するために利用できますが、エンドユーザーからの各生成リクエストはMCPプロセスを起動せず、WorkerからClaude APIとCloudflare APIを直接呼びます。
@@ -68,8 +70,8 @@ npm run typecheck           # TypeScript
 npm test                    # Vitest
 npm run build               # UI production build
 npm run db:migrate:remote   # 本番D1 migration
-npm run deploy              # 通常のWorkers構成
-npm run deploy:platform     # Workers for Platforms構成（有料）
+npm run deploy              # 無料モードの既定構成
+npm run deploy:platform     # 明示的に有料構成へ移行する場合のみ
 ```
 
 ## 生成アプリのランタイムAPI

@@ -16,7 +16,8 @@ export async function createThumbnail(
   if (!env.THUMBNAILS) return null;
   const key = `apps/${appId}/versions/${versionId}/og.png`;
 
-  if (env.BROWSER && targetUrl.startsWith("https://")) {
+  // Free mode always creates a deterministic SVG and never starts a browser session.
+  if (env.FREE_TIER_ONLY === "false" && env.BROWSER && targetUrl.startsWith("https://")) {
     try {
       const response = await env.BROWSER.quickAction("screenshot", {
         url: targetUrl,

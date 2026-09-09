@@ -29,6 +29,7 @@ export interface Env {
   CLOUDFLARE_ACCOUNT_ID?: string;
   CLOUDFLARE_API_TOKEN?: string;
   CF_WORKERS_SUBDOMAIN?: string;
+  FREE_TIER_ONLY?: "true" | "false";
   PUBLIC_GENERATED_WORKERS?: "true" | "false";
   WFP_NAMESPACE?: string;
 }

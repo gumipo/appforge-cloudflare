@@ -1,0 +1,34 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "appforge",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "observability": { "enabled": true },
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/preview/*", "/apps/*"]
+  },
+  "vars": {
+    "ENVIRONMENT": "production",
+    "AI_MODEL": "@cf/meta/llama-3.3-70b-instruct-fp8-fast"
+  },
+  "ai": { "binding": "AI" },
+  "browser": { "binding": "BROWSER" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "appforge-db",
+      "database_id": "REPLACE_WITH_D1_DATABASE_ID",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "THUMBNAILS", "bucket_name": "appforge-thumbnails" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "BUILDS", "queue": "appforge-builds" }],
+    "consumers": [{ "queue": "appforge-builds", "max_batch_size": 1, "max_batch_timeout": 2, "max_retries": 3, "dead_letter_queue": "appforge-builds-dlq" }]
+  }
+}
+

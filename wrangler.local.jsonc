@@ -1,0 +1,27 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "appforge-local",
+  "main": "src/worker/index.ts",
+  "compatibility_date": "2026-09-01",
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/preview/*", "/apps/*"]
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "appforge-local",
+      "database_id": "local-appforge-db",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "r2_buckets": [
+    { "binding": "THUMBNAILS", "bucket_name": "appforge-thumbnails-local" }
+  ],
+  "queues": {
+    "producers": [{ "binding": "BUILDS", "queue": "appforge-builds-local" }],
+    "consumers": [{ "queue": "appforge-builds-local", "max_batch_size": 1, "max_batch_timeout": 1 }]
+  }
+}
+

@@ -1,0 +1,5 @@
+# Production credentials are configured with `wrangler secret put`, not committed here.
+CLOUDFLARE_ACCOUNT_ID=your_account_id
+CLOUDFLARE_API_TOKEN=token_with_workers_scripts_write
+CF_WORKERS_SUBDOMAIN=your_workers_dev_subdomain
+

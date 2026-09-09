@@ -1,0 +1,39 @@
+{
+  "name": "appforge-cloudflare",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "overrides": {
+    "sharp": "0.35.4"
+  },
+  "scripts": {
+    "dev": "npm run db:migrate:local && concurrently -k -n web,worker -c cyan,magenta \"npm:dev:web\" \"npm:dev:worker\"",
+    "dev:web": "vite --host 0.0.0.0",
+    "dev:worker": "wrangler dev --config wrangler.local.jsonc --port 8787 --var ENVIRONMENT:development",
+    "build": "vite build",
+    "deploy": "npm run build && wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:migrate:local": "wrangler d1 migrations apply appforge-local --local --config wrangler.local.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply appforge-db --remote",
+    "cf:types": "wrangler types"
+  },
+  "dependencies": {
+    "hono": "^4.13.7",
+    "lucide-react": "^1.43.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260908.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.130.0"
+  }
+}
